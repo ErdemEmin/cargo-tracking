@@ -1,0 +1,140 @@
+{
+  "uid": "cargo-tracking",
+  "title": "KARGO TAKİP SİSTEMİ",
+  "tags": ["cargo", "kafka", "prometheus"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Toplam Kargo",
+      "id": 1,
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(cargo_created_total)", "refId": "A" }]
+    },
+    {
+      "type": "stat",
+      "title": "Teslim Edilen Kargo",
+      "id": 2,
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(cargo_delivered_total)", "refId": "A" }]
+    },
+    {
+      "type": "stat",
+      "title": "İptal Edilen Kargo",
+      "id": 3,
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(cargo_cancelled_total)", "refId": "A" }]
+    },
+    {
+      "type": "stat",
+      "title": "İşlenen Kafka Event",
+      "id": 4,
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(cargo_events_consumed_total)", "refId": "A" }]
+    },
+    {
+      "type": "stat",
+      "title": "Aktif Kargo (DELIVERED olmayan)",
+      "id": 5,
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "sum(cargo_created_total) - sum(cargo_delivered_total) - sum(cargo_cancelled_total)",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Toplam API İsteği",
+      "id": 6,
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(api_request_total)", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Kargo İşlemleri / Dakika",
+      "id": 10,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(rate(cargo_created_total[1m])) * 60",
+          "legendFormat": "oluşturulan",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(cargo_delivered_total[1m])) * 60",
+          "legendFormat": "teslim edilen",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(cargo_cancelled_total[1m])) * 60",
+          "legendFormat": "iptal edilen",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "API Response Time (ortalama, sn)",
+      "id": 11,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(rate(api_request_duration_seconds_sum[1m])) / sum(rate(api_request_duration_seconds_count[1m]))",
+          "legendFormat": "ortalama",
+          "refId": "A"
+        },
+        {
+          "expr": "max(api_request_duration_seconds_max)",
+          "legendFormat": "maksimum",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Event Türleri (Consumer)",
+      "id": 12,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "sum by (event) (cargo_events_consumed_total)",
+        "legendFormat": "{{event}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "piechart",
+      "title": "Kargo Durum Dağılımı",
+      "id": 13,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{
+        "expr": "sum by (status) (cargo_consumer_status_total)",
+        "legendFormat": "{{status}}",
+        "refId": "A"
+      }]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" }
+      }
+    ]
+  }
+}
