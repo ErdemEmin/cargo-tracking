@@ -46,7 +46,7 @@ done
 
 say "5) Terminal durum koruması (DELIVERED geri alınamaz)"
 CODE=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$API/cargo/${IDS[10]}/status" \
-  -H 'Content-Type: application/json' -d '{"status":"OUT_FOR_DELIVERY"}')
+  -H 'Content-Type: application/json' -d '{"status":"OUT_FOR_DELIVERY"}' || true)
 echo "beklenen 400, gelen $CODE"
 [ "$CODE" = "400" ] || { echo "HATA: terminal durum koruması çalışmadı"; exit 1; }
 

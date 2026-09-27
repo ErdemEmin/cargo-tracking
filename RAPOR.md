@@ -510,18 +510,122 @@ ve PyTest sonucunu doğrular.
 | `CANCELLED` | 2 |
 | **Toplam** | **20** |
 
+## Gerçek Çalıştırma Sonuçları
+
+Aşağıdaki çıktılar `scripts/full_flow_test.sh` betiğinin sıfır veritabanıyla
+(veritabanı ve Grafana volume'ları silindikten sonra) gerçek çalıştırmasından
+alınmıştır.
+
+### Servis Durumu
+
+```
+NAME               SERVICE     STATUS
+cargo-consumer     consumer    Up
+cargo-flask        flask       Up
+cargo-grafana      grafana     Up
+cargo-kafka        kafka       Up (healthy)
+cargo-prometheus   prometheus  Up
+```
+
+### API Metrikleri
+
+```
+cargo_created_total 20.0
+cargo_delivered_total 5.0
+cargo_cancelled_total 2.0
+cargo_status_changed_total 17.0
+```
+
+### Consumer Metrikleri
+
+```
+cargo_events_consumed_total{event="cargo.created"}        20.0
+cargo_events_consumed_total{event="cargo.status_changed"} 17.0
+cargo_events_consumed_total{event="cargo.delivered"}       5.0
+cargo_events_consumed_total{event="cargo.cancelled"}       2.0
+cargo_consumer_status_total{status="CREATED"}            20.0
+cargo_consumer_status_total{status="IN_TRANSIT"}         10.0
+cargo_consumer_status_total{status="DELIVERED"}           5.0
+cargo_consumer_status_total{status="CANCELLED"}           2.0
+```
+
+API tarafında üretilen sayaçlar ile consumer tarafında sayılan event'ler birebir
+eşleşmektedir (20 / 17 / 5 / 2). Bu, event'lerin kayıpsız iletildiğinin kanıtıdır.
+
+### Prometheus Hedef Durumu
+
+```
+cargo-api       up
+cargo-consumer  up
+```
+
+### Veritabanı Son Durumu
+
+```json
+{
+    "CANCELLED": 2,
+    "CREATED": 3,
+    "DELIVERED": 5,
+    "IN_TRANSIT": 10
+}
+```
+
+Beklenen dağılımla birebir uyumlu. Betik bu değerleri doğruladıktan sonra
+`DOGRULAMA BASARILI` mesajıyla sonlandı.
+
+### Grafana Dashboard Panelleri
+
+Dashboard 10 panel içerir ve tümü canlı veri göstermektedir:
+
+| # | Panel | Gösterilen Değer |
+|---|---|---|
+| 1 | Toplam Kargo | 20 |
+| 2 | Teslim Edilen Kargo | 5 |
+| 3 | İptal Edilen Kargo | 2 |
+| 4 | İşlenen Kafka Event | 44 |
+| 5 | Aktif Kargo (DELIVERED olmayan) | 13 |
+| 6 | Toplam API İsteği | 72 |
+| 7 | Kargo İşlemleri / Dakika | Zaman serisi grafiği |
+| 8 | API Response Time (ortalama, sn) | Zaman serisi grafiği |
+| 9 | Kafka Event Türleri (Consumer) | Event kırılım grafiği |
+| 10 | Kargo Durum Dağılımı | Durum dağılımı pasta grafiği |
+
+Aktif kargo değeri (13) hesapla doğrulanmıştır: 20 oluşturulan − 5 teslim − 2 iptal = 13.
+
+### Consumer Terminal Çıktısı
+
+```
+[cargo.created@0]        Cargo 1 created. (tracking: KRG-2026-1)
+[cargo.status_changed@0] Cargo 1 status changed to IN_TRANSIT.
+...
+[cargo.status_changed@0] Cargo 15 status changed to DELIVERED.
+[cargo.delivered@0]      Cargo 15 delivered.
+[cargo.status_changed@0] Cargo 17 status changed to CANCELLED.
+[cargo.cancelled@0]      Cargo 17 cancelled.
+```
+
 ## Doğrulanan Noktalar
 
-1. **Birim testler** — 13 testin tamamı geçer.
+1. **Birim testler** — 13 testin tamamı geçer (`13 passed in 1.75s`).
 2. **Terminal durum koruması** — `DELIVERED` kargonun durumu tekrar
    `OUT_FOR_DELIVERY` yapılamaz, API 400 döner.
 3. **Kafka event akışı** — Consumer terminalinde `cargo.created`,
    `cargo.status_changed`, `cargo.delivered` ve `cargo.cancelled` mesajları görünür.
-4. **Prometheus hedefleri** — `cargo-api` ve `cargo-consumer` işleri `up` durumundadır.
-5. **Grafana** — Dashboard yüklenir, altı istatistik paneli ve dört zaman serisi
+4. **Metrik tutarlılığı** — API sayaçları ile consumer sayaçları birebir eşleşir.
+5. **Prometheus hedefleri** — `cargo-api` ve `cargo-consumer` işleri `up` durumundadır.
+6. **Grafana** — Dashboard yüklenir, 6 istatistik paneli ve 4 zaman serisi
    grafiği veri gösterir.
-6. **Yeniden başlatma** — `docker compose down && docker compose up -d` sonrasında
-   servisler ayağa kalkar, volume'daki veri korunur.
+7. **Sıfırdan kurulum** — Volume'lar silinip `docker compose up -d` ile yeniden
+   kurulduğunda tüm zincir tekrar çalışır hâle gelir.
+
+## Tespit Edilen ve Çözülen Sorunlar
+
+| Sorun | Neden | Çözüm |
+|---|---|---|
+| `no such table: cargo` | Uygulama açılışında tablo oluşturma `TESTING` modunda atlanıyordu | `SKIP_DB_INIT` bayrağı eklendi, test modunda da tablo oluşturuluyor |
+| `INTERNALERROR> SystemExit: 0` | Smoke test betiği `*_test.py` kalıbına takılıp pytest'i düşürüyordu | Dosya adı değiştirildi |
+| `bitnami/kafka:3.7 not found` | Bitnami kendi imaj etiketlerini taşıdı | Resmî `apache/kafka:3.7.1` imajına geçildi, `KAFKA_CFG_*` → `KAFKA_*` değişkenlerine uyarlandı |
+| Senaryonun 5. adımda kesilmesi | `set -e` altında 400 dönen `curl` betiği durduruyordu | `curl` komutuna `|| true` eklendi, HTTP kodu ayrıca karşılaştırılıyor |
 
 ---
 
