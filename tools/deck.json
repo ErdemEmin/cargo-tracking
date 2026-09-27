@@ -1,0 +1,188 @@
+{
+  "slide_size": "16:9",
+  "slides": [
+    {
+      "layout": "section",
+      "title": "Kafka ve Grafana Tabanlı Kargo Takip Sistemi",
+      "subtitle": "Olay tabanlı mimari ile izlenebilir bir REST API\n\nErdem Emin",
+      "background": "0B2545",
+      "notes": "Açılış: Projemin amacı yalnızca çalışan bir REST API geliştirmek değil; uçtan uca kod yazma → test etme → olay üretme → olay tüketme → ölçme → görselleştirme → container'da çalıştırma zincirini kurmak."
+    },
+    {
+      "layout": "title_content",
+      "title": "Problem ve Çözüm",
+      "bullets": [
+        "Kargo durumu değişiklikleri birden fazla servise bildirilmelidir",
+        "Klasik yaklaşımda API her bileşene doğrudan bağlanır → sıkı bağımlılık",
+        "Çözüm: olay tabanlı mimari — API sadece olayı üretir, bağlı olanlar kendileri dinler",
+        "Sonuç: API yavaşlasa bile event'ler kaybolmaz, yeni servisler kolayca eklenir",
+        "Bu projede: Flask → Kafka → Consumer → Prometheus → Grafana"
+      ],
+      "notes": "Problemi somut anlat: kargo oluştuğunda kimseyi haberdar etmem gerekiyor. Doğrudan çağırsam API yavaşlar. Kafka tampon görevi görür."
+    },
+    {
+      "layout": "title_content",
+      "title": "Sistem Mimarisi",
+      "shapes": [
+        {"type": "rectangle", "text": "Client", "fill": "1F6FEB", "left": 0.6, "top": 0.9, "width": 1.1, "height": 0.5},
+        {"type": "chevron", "text": "POST /cargo", "fill": "829AB1", "left": 1.75, "top": 0.98, "width": 1.5, "height": 0.34},
+        {"type": "rectangle", "text": "Flask API\n:5000", "fill": "1F6FEB", "left": 3.3, "top": 0.75, "width": 1.7, "height": 0.8},
+        {"type": "chevron", "text": "SQLite + Kafka event", "fill": "829AB1", "left": 3.3, "top": 1.7, "width": 4.3, "height": 0.34},
+        {"type": "rectangle", "text": "Kafka\ncargo-events\n:9092", "fill": "0B2545", "left": 3.5, "top": 2.15, "width": 1.7, "height": 0.9},
+        {"type": "chevron", "text": "event okunur", "fill": "829AB1", "left": 3.5, "top": 3.2, "width": 1.7, "height": 0.34},
+        {"type": "rectangle", "text": "Consumer\n:9091", "fill": "0B2545", "left": 3.5, "top": 3.65, "width": 1.7, "height": 0.7},
+        {"type": "chevron", "text": "/metrics", "fill": "829AB1", "left": 5.4, "top": 3.85, "width": 1.2, "height": 0.3},
+        {"type": "rectangle", "text": "Prometheus\n:9090", "fill": "E85D04", "left": 6.65, "top": 3.65, "width": 1.6, "height": 0.7},
+        {"type": "chevron", "text": "sorgu", "fill": "829AB1", "left": 6.65, "top": 3.0, "width": 1.6, "height": 0.3},
+        {"type": "rectangle", "text": "Grafana\n:3000", "fill": "E85D04", "left": 6.65, "top": 2.15, "width": 1.6, "height": 0.7},
+        {"type": "rectangle", "text": "SQLite\nkargo kaydı", "fill": "3D5A80", "left": 0.6, "top": 2.15, "width": 1.5, "height": 0.7}
+      ],
+      "bullets": [
+        "Tek komutla ayağa kalkar: docker compose up -d"
+      ],
+      "notes": "Sağa doğru akışı takip et. API iki şey yapar: SQLite'a yazar, Kafka'ya event gönderir. Consumer bu event'leri okuyup metrik üretir."
+    },
+    {
+      "layout": "title_content",
+      "title": "REST API ve Durum Makinesi",
+      "tables": [
+        {
+          "rows": [
+            ["Metot", "Yol", "İşlev", "Yanıt"],
+            ["POST", "/cargo", "Kargo oluştur", "201"],
+            ["GET", "/cargo", "Listele + filtrele", "200"],
+            ["GET", "/cargo/<id>", "Tek kargo", "404"],
+            ["PUT", "/cargo/<id>/status", "Durum değiştir", "200/400"],
+            ["DELETE", "/cargo/<id>", "Sil", "200/404"]
+          ]
+        }
+      ],
+      "bullets": [
+        "CREATED → SHIPPED → IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED",
+        "DELIVERED ve CANCELLED terminal durumdur: tekrar değiştirilemez, API 400 döner",
+        "Bu kural teslim edilmiş kargonun yeniden yola çıkmasını engeller"
+      ],
+      "notes": "Terminal durum kuralını vurgula — iş kuralı models.py'de, testlerle doğrulanmış. Hocaya 'bu neden önemli' diye sorulursa: gerçek hayatta teslim edilmiş kargo iptal edilemez."
+    },
+    {
+      "layout": "title_content",
+      "title": "Kafka Producer: 5 Olay Tipi",
+      "bullets": [
+        "cargo.created — kargo oluşturuldu",
+        "cargo.status_changed — durum değişti",
+        "cargo.delivered — teslim edildi",
+        "cargo.cancelled — iptal edildi",
+        "cargo.deleted — silindi",
+        "cargo_id mesaj anahtarı (key) olarak kullanılır → aynı kargonun event'leri aynı partition'a düşer, sıralama korunur"
+      ],
+      "notes": "Key olarak cargo_id vermek önemli bir karar. Kafka key'e göre partition atar; key yoksa round-robin dağıtır ve sıralama bozulur."
+    },
+    {
+      "layout": "title_content",
+      "title": "Tasarım Kararı: Kafka Yokken API Çökmez",
+      "bullets": [
+        "Producer tembel (lazy) bağlanır: uygulama açılışında değil, ilk gönderimde",
+        "Broker kapalıysa API isteği yine 201/200 döner, event kaybolur ve loglanır",
+        "Retry: 3 deneme, 3 saniye zaman aşımı",
+        "Sonuç: veri yazma sorumluluğu ile event yayınlama sorumluluğu ayrışır",
+        "Pratik fayda: API ve testler Kafka kurulmadan doğrulanabilir"
+      ],
+      "notes": "Bu benim en çok savunduğum tasarım kararı. Testler KAFKA_ENABLED=0 ile Kafka olmadan koşar. Production'da kalıcı kuyruk (dead-letter) eklenebilir."
+    },
+    {
+      "layout": "title_content",
+      "title": "Prometheus Metrikleri",
+      "tables": [
+        {
+          "rows": [
+            ["Metrik", "Tip", "Ne ölçer"],
+            ["cargo_created_total", "Counter", "Oluşturulan kargo"],
+            ["cargo_delivered_total", "Counter", "Teslim edilen"],
+            ["cargo_cancelled_total", "Counter", "İptal edilen"],
+            ["cargo_status_changed_total", "Counter", "Durum değişikliği"],
+            ["api_request_total", "Counter", "İstek sayısı (3 etiket)"],
+            ["api_request_duration_seconds", "Histogram", "İstek süresi"]
+          ]
+        }
+      ],
+      "bullets": [
+        "Histogram otomatik _sum / _count / _max üretir → ortalama süre sorgusu mümkün",
+        "Etiket seçimi (method, endpoint, status) sorgu esnekliği sağlar"
+      ],
+      "notes": "Counter vs Gauge farkını bilmesi gerekebilir: Counter sadece artar, Gauge ini çekilir. Kargo sayısı monoton artar -> Counter."
+    },
+    {
+      "layout": "title_content",
+      "title": "Grafana Dashboard",
+      "bullets": [
+        "6 istatistik paneli: Toplam, Teslim, İptal, Aktif Kargo, Event, API İsteği",
+        "4 zaman serisi grafiği: dakikadaki işlem, API süresi, event türleri, durum dağılımı",
+        "Dashboard JSON dosyasından provisioning ile yüklenir",
+        "Container yeniden başlasa da korunur, elle yapılandırma gerekmez"
+      ],
+      "notes": "Burada ekran görüntüsü göster. Provisioning'in avantajını açıkla: ortamlar arası tekrarlanabilirlik."
+    },
+    {
+      "layout": "title_content",
+      "title": "Test Sonuçları",
+      "bullets": [
+        "13 PyTest testi — doküman isteği 8, projede 13 yazıldı",
+        "Her test kendi geçici SQLite'ını kullanır (tmp_path) → testler izole, sırasız",
+        "Testler KAFKA_ENABLED=0 ile Kafka bağımsız koşar",
+        "Tam akış senaryosu: 20 kargo → 10 IN_TRANSIT → 5 DELIVERED → 2 CANCELLED"
+      ],
+      "tables": [
+        {
+          "rows": [
+            ["Kontrol", "Sonuç"],
+            ["PyTest", "13 passed in 1.75s"],
+            ["API metrikleri", "20 / 5 / 2 / 17"],
+            ["Consumer metrikleri", "20 / 17 / 5 / 2"],
+            ["Prometheus hedefleri", "cargo-api up, cargo-consumer up"]
+          ]
+        }
+      ],
+      "notes": "EN ÖNEMLİ NOKTA: API sayaçları ile consumer sayaçları birebir aynı (20/17/5/2). Bu, event'lerin kayıpsız iletildiğinin kanıtı."
+    },
+    {
+      "layout": "title_content",
+      "title": "Docker Compose: Tek Komut",
+      "tables": [
+        {
+          "rows": [
+            ["Servis", "İmaj", "Port"],
+            ["kafka", "apache/kafka:3.7.1", "9092"],
+            ["flask", "Dockerfile", "5000"],
+            ["consumer", "Dockerfile", "9091"],
+            ["prometheus", "prom/prometheus:v2.54.1", "9090"],
+            ["grafana", "grafana/grafana:11.2.0", "3000"]
+          ]
+        }
+      ],
+      "bullets": [
+        "Kafka KRaft modunda çalışır (ZooKeeper yok)",
+        "Healthcheck: servisler Kafka hazır olmadan başlamaz",
+        "Volume: SQLite kalıcı, docker compose down -v ile temizlenir"
+      ],
+      "notes": "Dockerfile tek, iki servis onu paylaşıyor (flask ve consumer). Kafka için bitnami yerine resmi apache imajı kullanıldı."
+    },
+    {
+      "layout": "section",
+      "title": "CANLI DEMO",
+      "subtitle": "Kargo oluştur → Kafka event → Consumer → Prometheus → Grafana",
+      "background": "E85D04",
+      "notes": "Sıra: 1) curl POST /cargo 2) consumer logları 3) /metrics 4) Prometheus targets 5) Grafana dashboard. Her adımda sayının değiştiğini göster."
+    },
+    {
+      "layout": "title_content",
+      "title": "Sonuç ve Öneriler",
+      "bullets": [
+        "5 servis tek komutla çalışıyor, uçtan uca zincir doğrulandı",
+        "API sayaçları ile consumer sayaçlarının eşleşmesi → kayıpsız event iletimi kanıtı",
+        "Öğrenilen: olay tabanlı mimari, mesaj anahtarı kullanımı, metrik tasarımı, test izolasyonu, Docker orkestrasyonu",
+        "İleriye yönelik: PostgreSQL, confluent-kafka, Alertmanager, web arayüzü, gerçek taşıyıcı entegrasyonu"
+      ],
+      "notes": "Kapanış: Nihai hedef kod yazma → test → olay üret → olay tüket → ölç → görselleştir → container'da çalıştırma zinciriydi ve hepsi tamamlandı."
+    }
+  ]
+}
