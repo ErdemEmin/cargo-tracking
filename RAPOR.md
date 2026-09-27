@@ -400,6 +400,12 @@ cargo_cancelled_total 7.0
 
 # 9. Grafana Dashboard
 
+![Grafana Dashboard - KARGO TAKİP SİSTEMİ](docs/grafana-dashboard.png)
+
+*Ekran görüntüsü `docs/grafana-dashboard.png` dosyasındadır (963×1079 piksel).
+Dashboard 10 panel içerir: üst satırda 6 istatistik paneli, alt satırda 4 zaman
+serisi grafiği.*
+
 ## Erişim
 
 `http://localhost:3000` — kullanıcı adı `admin`, şifre `admin` (yerel geliştirme).

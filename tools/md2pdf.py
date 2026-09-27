@@ -16,8 +16,8 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import (BaseDocTemplate, Frame, PageTemplate, Paragraph,
-                                Preformatted, Spacer, Table, TableStyle)
+from reportlab.platypus import (BaseDocTemplate, Frame, Image, PageTemplate,
+                                Paragraph, Preformatted, Spacer, Table, TableStyle)
 
 BASE = Path(__file__).resolve().parent.parent  # proje kökü
 SRC = BASE / "RAPOR.md"
@@ -180,6 +180,30 @@ def convert():
         # yatay çizgi
         if re.match(r"^-{3,}$", stripped):
             story.append(Spacer(1, 5))
+            i += 1
+            continue
+
+        # gorsel: ![alt](yol)
+        m = re.match(r"^!\[([^\]]*)\]\(([^)]+)\)$", stripped)
+        if m:
+            path = BASE / m.group(2)
+            if path.exists():
+                avail = A4[0] - 36 * mm
+                img = Image(str(path))
+                iw, ih = img.imageWidth, img.imageHeight
+                w = min(avail, iw)
+                img.drawWidth, img.drawHeight = w, ih * (w / iw)
+                story.append(img)
+                story.append(Spacer(1, 4))
+                if m.group(1):
+                    story.append(Paragraph(
+                        f'<font size="8" color="#6b7785">{m.group(1)}</font>',
+                        STYLES["body"]))
+                story.append(Spacer(1, 9))
+            else:
+                story.append(Paragraph(
+                    f'<font size="8" color="#999999">'
+                    f'[gorsel bulunamadi: {m.group(2)}]</font>', STYLES["body"]))
             i += 1
             continue
 
