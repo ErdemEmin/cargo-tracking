@@ -3,6 +3,41 @@
 Olay tabanlı (event-driven) mimariyle çalışan bir kargo takip sistemi.
 Flask REST API → Kafka → Consumer → Prometheus → Grafana zinciri tek komutla ayağa kalkar.
 
+## Teslim Dokümanları
+
+| Doküman | Dosya | Açıklama |
+|---|---|---|
+| **Proje Raporu (PDF)** | [`Kargo_Takip_Sistemi_Raporu.pdf`](Kargo_Takip_Sistemi_Raporu.pdf) | 13 sayfa, 12 başlıklı white paper — teslim için bu kullanılır |
+| Rapor kaynağı | [`RAPOR.md`](RAPOR.md) | Markdown hali, GitHub'da düzenlenebilir |
+| **Sunum (PPTX)** | [`Kargo_Takip_Sistemi_Sunum.pptx`](Kargo_Takip_Sistemi_Sunum.pptx) | 12 slayt, her slaytta konuşmacı notu var |
+| Dashboard görseli | [`docs/grafana-dashboard.png`](docs/grafana-dashboard.png) | Grafana dashboard ekran görüntüsü (10 panel, canlı veri) |
+| Uygulama planı | [`PLAN.md`](PLAN.md) | Aşama planı ve teknik kararlar |
+
+### Sunum / Demo Nasıl Yapılır
+
+```bash
+# 1) Servisleri ayağa kaldır
+docker compose up -d
+
+# 2) Demo akışını çalıştır (9 adım: kargo → Kafka → consumer → metrikler)
+bash scripts/demo.sh
+```
+
+Ardından tarayıcıda:
+
+| Adres | Ne gösterir |
+|---|---|
+| http://localhost:5000 | REST API |
+| http://localhost:9091/metrics | Consumer metrikleri |
+| http://localhost:9090/targets | Prometheus hedefleri (`cargo-api up`, `cargo-consumer up`) |
+| http://localhost:3000 | Grafana dashboard (admin / admin) |
+
+Demo sırasında bakılacak en önemli nokta: **API'nin ürettiği sayaçlar ile
+consumer'ın saydığı event sayısı birebir aynıdır** (oluşturma 20, durum değişikliği 17,
+teslim 5, iptal 2). Bu, event'lerin kayıpsız iletildiğinin kanıtıdır.
+
+---
+
 ## Mimari
 
 ```
