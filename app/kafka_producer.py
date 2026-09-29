@@ -81,11 +81,20 @@ def publish(event, cargo_id, tracking_number=None, status=None, **extra):
 
 
 def healthcheck():
-    """Broker erişilebilir mi? (Docker healthcheck için)"""
+    """Broker erişilebilir mi?
+
+    Tembel baglanma nedeniyle uygulama yeniden basladiginda producer
+    henuz olusmamis olabilir; bu durumda bootstrap_connected() sifir
+    metrik uretilmis bir nesne uzerinde False doner. Bu yuzden oncece
+    ucuz bir metadata denemesi (partitions_for) yapilir.
+    """
     producer = _get_producer()
     if producer is None:
         return False
     try:
-        return bool(producer.bootstrap_connected())
+        # partitions_for broker'a metadata istegi gonderir; topic yoksa
+        # None doner ama broker yine de erisilebilirdir.
+        producer.partitions_for(Config.KAFKA_TOPIC)
+        return True
     except Exception:  # noqa: BLE001
         return False

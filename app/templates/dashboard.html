@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kargo Takip — Kontrol Paneli</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#141d2f; --card2:#1a2438; --line:#243049;
+    --fg:#e6edf7; --muted:#8fa3c0; --accent:#3b82f6; --ok:#22c55e;
+    --warn:#f59e0b; --bad:#ef4444; --purple:#a855f7; --cyan:#06b6d4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding:18px 22px 60px}
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+  h1{font-size:21px;font-weight:650;letter-spacing:-.2px}
+  .sub{color:var(--muted);font-size:12.5px}
+  .links{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .links a{background:var(--card2);border:1px solid var(--line);color:var(--muted);
+    padding:5px 11px;border-radius:7px;text-decoration:none;font-size:12px;transition:.15s}
+  .links a:hover{color:var(--fg);border-color:var(--accent)}
+
+  /* servis rozetleri */
+  #svcs{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0 20px}
+  .svc{background:var(--card);border:1px solid var(--line);border-radius:9px;
+    padding:7px 13px;font-size:12.5px;display:flex;align-items:center;gap:8px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+  .dot.up{background:var(--ok);box-shadow:0 0 8px rgba(34,197,94,.55)}
+  .dot.down{background:var(--bad);box-shadow:0 0 8px rgba(239,68,68,.5)}
+  .dot.wait{background:var(--warn);animation:pulse 1.1s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+
+  .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;align-items:start}
+  @media(max-width:1080px){.grid{grid-template-columns:1fr}}
+  /* kargo listesi uzadiginda sag sutun esitlenir, panel bosluk birakmaz */
+  .sticky{position:sticky;top:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .card > h2{font-size:12px;text-transform:uppercase;letter-spacing:.9px;
+    color:var(--muted);padding:11px 15px;border-bottom:1px solid var(--line);
+    font-weight:600;display:flex;align-items:center;gap:9px}
+  .card > h2 .count{background:var(--card2);border:1px solid var(--line);
+    border-radius:20px;padding:1px 8px;font-size:11px;color:var(--fg)}
+  .body{padding:15px}
+
+  /* form */
+  label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px;font-weight:500}
+  input,select{width:100%;background:var(--bg);border:1px solid var(--line);
+    color:var(--fg);padding:9px 11px;border-radius:8px;font-size:13.5px;font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(59,130,246,.16)}
+  .frow{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px}
+  button{cursor:pointer;font-family:inherit;font-size:13px;font-weight:550;
+    border-radius:8px;padding:9px 15px;border:1px solid var(--line);
+    background:var(--card2);color:var(--fg);transition:.14s}
+  button:hover{border-color:var(--accent)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .primary{width:100%;background:var(--accent);border-color:var(--accent);color:#fff;padding:11px}
+  .primary:hover{background:#2f6fd8}
+
+  /* kargo listesi */
+  .cargo{border:1px solid var(--line);border-radius:10px;padding:11px 13px;
+    margin-bottom:10px;background:var(--card2)}
+  .chead{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:8px}
+  .tn{font-family:Consolas,monospace;font-size:12.5px;color:var(--cyan);font-weight:600}
+  .badge{font-size:10.5px;font-weight:650;padding:2.5px 9px;border-radius:20px;
+    text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+  .s-CREATED{background:rgba(100,116,139,.22);color:#94a3b8}
+  .s-SHIPPED{background:rgba(59,130,246,.2);color:#60a5fa}
+  .s-IN_TRANSIT{background:rgba(168,85,247,.2);color:#c084fc}
+  .s-OUT_FOR_DELIVERY{background:rgba(245,158,11,.2);color:#fbbf24}
+  .s-DELIVERED{background:rgba(34,197,94,.2);color:#4ade80}
+  .s-CANCELLED{background:rgba(239,68,68,.2);color:#f87171}
+  .cmeta{font-size:12px;color:var(--muted);margin-bottom:9px}
+  .cmeta b{color:var(--fg);font-weight:550}
+  .acts{display:flex;gap:6px;flex-wrap:wrap}
+  .acts button{padding:6px 11px;font-size:11.5px}
+  .acts .ok{color:#4ade80;border-color:rgba(34,197,94,.4)}
+  .acts .no{color:#f87171;border-color:rgba(239,68,68,.4)}
+  .acts .done{opacity:.28;cursor:not-allowed}
+  .empty{color:var(--muted);text-align:center;padding:34px 14px;font-size:13px}
+
+  /* event akisi */
+  #events{max-height:560px;overflow-y:auto;font-family:Consolas,monospace;font-size:11.8px}
+  .ev{display:flex;gap:9px;padding:6px 0;border-bottom:1px solid rgba(36,48,73,.6);
+    align-items:baseline;animation:slide .3s}
+  @keyframes slide{from{opacity:0;transform:translateX(-8px)}}
+  .ev .t{color:var(--muted);flex:none;font-size:11px}
+  .ev .e{flex:none;width:158px;font-weight:600;font-size:10.8px;
+    text-transform:uppercase;letter-spacing:.2px}
+  .ev .m{color:var(--fg);word-break:break-word}
+  .e-cargo_created{color:#60a5fa}
+  .e-cargo_status_changed{color:#c084fc}
+  .e-cargo_delivered{color:#4ade80}
+  .e-cargo_cancelled{color:#f87171}
+  .e-cargo_deleted{color:#f87171}
+
+  /* metrikler */
+  .mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px}
+  .m{background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:11px}
+  .m .v{font-size:22px;font-weight:680;letter-spacing:-.5px;line-height:1.15}
+  .m .k{font-size:11px;color:var(--muted);margin-top:3px}
+  .c-blue .v{color:#60a5fa}.c-purple .v{color:#c084fc}
+  .c-green .v{color:#4ade80}.c-red .v{color:#f87171}
+  .c-amber .v{color:#fbbf24}.c-cyan .v{color:#22d3ee}
+
+  #toast{position:fixed;bottom:22px;right:22px;display:flex;
+    flex-direction:column;gap:8px;z-index:99}
+  .tst{background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:9px;padding:10px 15px;font-size:13px;max-width:380px;
+    box-shadow:0 8px 26px rgba(0,0,0,.5);animation:slide .25s}
+  .tst.err{border-left-color:var(--bad)}
+  .tst.ok{border-left-color:var(--ok)}
+  code{font-family:Consolas,monospace;font-size:11.5px;background:rgba(0,0,0,.35);
+    padding:1.5px 6px;border-radius:4px;color:var(--cyan)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kargo Takip Sistemi — Kontrol Paneli</h1>
+  <span class="sub">Flask → Kafka → Consumer → Prometheus → Grafana</span>
+  <div class="links">
+    <a href="http://localhost:3000" target="_blank">Grafana</a>
+    <a href="http://localhost:9090" target="_blank">Prometheus</a>
+    <a href="http://localhost:5000/metrics" target="_blank">API /metrics</a>
+    <a href="http://localhost:9091/metrics" target="_blank">Consumer /metrics</a>
+    <a href="http://localhost:5000/health" target="_blank">Health</a>
+  </div>
+</header>
+
+<div id="svcs"></div>
+
+<div class="grid">
+  <div>
+    <!-- KURTARMA ISLEMLERI -->
+    <div class="card" style="margin-bottom:16px">
+      <h2>Kargo İşlemleri</h2>
+      <div class="body">
+        <div class="frow">
+          <div><label>Takip No</label><input id="tn" placeholder="KRG-1001" value=""></div>
+          <div><label>Gönderici</label><input id="sn" placeholder="Ahmet Yılmaz" value=""></div>
+        </div>
+        <div class="frow">
+          <div><label>Alıcı</label><input id="rc" placeholder="Mehmet Demir" value=""></div>
+          <div><label>&nbsp;</label>
+            <button class="primary" id="btnNew" style="width:100%">Kargo Oluştur → Kafka'ya Gönder</button>
+          </div>
+        </div>
+        <div class="frow" style="grid-template-columns:2fr 1fr;margin-bottom:0">
+          <div><label>Durum Değiştir (Gönder / Teslim al)</label>
+            <select id="stSel"></select>
+          </div>
+          <div><label>&nbsp;</label>
+            <button id="btnSt" style="width:100%">Uygula</button>
+          </div>
+        </div>
+        <div class="frow" style="grid-template-columns:2fr 1fr;margin:11px 0 0">
+          <div><label>Tek Kargo ID (liste yerine doğrudan)</label>
+            <input id="directId" type="number" placeholder="örn. 1"></div>
+          <div><label>&nbsp;</label>
+            <button id="btnDirect" style="width:100%">Bu ID'ye Uygula</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KARGO LISTESI -->
+    <div class="card">
+      <h2>Kayıtlı Kargolar <span class="count" id="cCount">0</span></h2>
+      <div class="body" id="cargoList">
+        <div class="empty">Yükleniyor…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sticky">
+    <!-- EVENT AKIŞI -->
+    <div class="card" style="margin-bottom:16px">
+      <h2>Kafka Event Akışı <span class="count" id="eCount">0</span></h2>
+      <div class="body" style="padding:8px 15px 12px">
+        <div id="events"><div class="empty">Consumer'dan event bekleniyor…</div></div>
+      </div>
+    </div>
+
+    <!-- METRIKLER -->
+    <div class="card">
+      <h2>Canlı Metrikler</h2>
+      <div class="body">
+        <div class="mgrid" id="mgrid"></div>
+        <div style="margin-top:13px;font-size:11.5px;color:var(--muted);line-height:1.7">
+          <div>API: <code>cargo_created_total</code> <code>cargo_delivered_total</code>
+               <code>cargo_cancelled_total</code></div>
+          <div>Consumer: <code>cargo_events_consumed_total</code> — <b style="color:var(--fg)">Event</b>
+               değeriyle eşleşmelidir</div>
+          <div style="margin-top:5px;color:#6b7785">Not: sayaçlar container yeniden
+               başlatıldığında sıfırlanır; event listesi ise son 200 event'i tutar.
+               Sunumdan önce <code>docker compose restart flask consumer</code>
+               sonrası yeniden sayım yap.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = location.origin;
+const EVENTS_URL = "http://localhost:9091/events";
+const STATUSES = ["CREATED","SHIPPED","IN_TRANSIT","OUT_FOR_DELIVERY","DELIVERED","CANCELLED"];
+const TERMINAL = ["DELIVERED","CANCELLED"];
+const NEXT = {CREATED:"SHIPPED",SHIPPED:"IN_TRANSIT",IN_TRANSIT:"OUT_FOR_DELIVERY",
+              OUT_FOR_DELIVERY:"DELIVERED"};
+const TRACKING = {CREATED:"#94a3b8",SHIPPED:"#60a5fa",IN_TRANSIT:"#c084fc",
+                  OUT_FOR_DELIVERY:"#fbbf24",DELIVERED:"#4ade80",CANCELLED:"#f87171"};
+const LABEL = {CREATED:"Oluşturuldu",SHIPPED:"Kargoya Verildi",IN_TRANSIT:"Dağıtımda",
+               OUT_FOR_DELIVERY:"Dağıtıma Çıktı",DELIVERED:"Teslim Edildi",CANCELLED:"İptal"};
+
+let CARGOS = [], SEEN_EVENTS = new Set();
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[<>&"]/g, c =>
+  ({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
+
+function toast(msg, kind=""){
+  const d = document.createElement("div");
+  d.className = "tst " + kind;
+  d.textContent = msg;
+  $("toast").appendChild(d);
+  setTimeout(() => { d.style.opacity="0"; d.style.transition="opacity .4s";
+                     setTimeout(()=>d.remove(), 400); }, 3400);
+}
+
+async function api(path, opts){
+  const r = await fetch(API + path, opts);
+  let body = null;
+  try { body = await r.json(); } catch(e) {}
+  if (!r.ok) throw new Error((body && body.error) || ("HTTP " + r.status));
+  return body;
+}
+
+/* ---------------- SERVISLER ---------------- */
+async function loadServices(){
+  // Kafka ve Consumer dogrudan sunucudan; digerleri API uzerinden sorulur.
+  const items = [
+    ["Flask API",    "/health",      d => d.status === "ok"],
+    ["Kafka",        "/api/kafka",   d => d.connected],
+    ["Consumer",     null,           null],
+    ["Prometheus",   "/api/prom",    d => d.up],
+    ["Grafana",      "/api/grafana", d => d.up],
+  ];
+  const el = $("svcs");
+  el.innerHTML = items.map(([n]) =>
+    `<div class="svc"><span class="dot wait"></span><span>${n}</span></div>`).join("");
+
+  const set = (i, up, note) => {
+    const node = el.children[i];
+    node.querySelector(".dot").className = "dot " + (up ? "up" : "down");
+    if (note) node.lastElementChild.textContent = items[i][0] + " " + note;
+  };
+
+  for (let i = 0; i < items.length; i++){
+    const [name, path, chk] = items[i];
+    try{
+      if (name === "Consumer"){
+        const r = await fetch(EVENTS_URL, {cache:"no-store"});
+        if (!r.ok) throw new Error("consumer " + r.status);
+        const d = await r.json();
+        set(i, true, `(${d.count} event)`);
+      } else {
+        // Kafka healthcheck uygulama yeniden baslayinca baglantiyi tazelemedigi
+        // icin bir kez dogrudan deneriz; yoksa /health sonucuna guveniriz.
+        const d = await api(path, {cache:"no-store"});
+        set(i, chk(d), "");
+      }
+    }catch(e){
+      set(i, false, "");
+    }
+  }
+}
+
+/* ---------------- KARGOLAR ---------------- */
+async function loadCargo(){
+  try{
+    const d = await api("/cargo?limit=50");
+    CARGOS = d.items;
+  }catch(e){
+    $("cargoList").innerHTML = `<div class="empty">Hata: ${esc(e.message)}</div>`;
+    return;
+  }
+  $("cCount").textContent = CARGOS.length;
+  if (!CARGOS.length){
+    $("cargoList").innerHTML = `<div class="empty">Henüz kargo yok — yukarıdan oluştur</div>`;
+    return;
+  }
+  $("cargoList").innerHTML = CARGOS.map(c => {
+    const term = TERMINAL.includes(c.status);
+    const nx  = NEXT[c.status];
+    return `
+    <div class="cargo">
+      <div class="chead">
+        <span class="tn">${esc(c.tracking_number)}</span>
+        <span class="badge s-${c.status}">${esc(LABEL[c.status])}</span>
+      </div>
+      <div class="cmeta">#${c.id} · <b>${esc(c.sender)}</b> → <b>${esc(c.receiver)}</b>
+        · ${esc(c.created_at)}</div>
+      <div class="acts">
+        ${nx ? `<button class="ok" data-act="next" data-id="${c.id}" data-to="${nx}">
+                  → ${esc(LABEL[nx])}</button>` : ""}
+        <button class="ok" data-act="st" data-id="${c.id}" data-to="DELIVERED"
+          ${term?"disabled":""}>Teslim Et</button>
+        <button class="no" data-act="st" data-id="${c.id}" data-to="CANCELLED"
+          ${term?"disabled":""}>İptal Et</button>
+        <button class="no" data-act="del" data-id="${c.id}">Sil</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function setStatus(id, to){
+  if (TERMINAL.includes(CARGOS.find(c=>c.id===+id)?.status)){
+    toast(`Bu kargo terminal durumda, değiştirilemez.`, "err");
+    return;
+  }
+  try{
+    await api(`/cargo/${id}/status`, {
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({status: to})
+    });
+    toast(`Kargo #${id} → ${LABEL[to]} (Kafka'ya gönderildi)`, "ok");
+    await Promise.all([loadCargo(), loadMetrics()]);
+  }catch(e){ toast(`Hata: ${e.message}`, "err"); }
+}
+
+$("cargoList").addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-act]");
+  if (!b) return;
+  const id = b.dataset.id;
+  if (b.dataset.act === "del"){
+    api(`/cargo/${id}`, {method:"DELETE"})
+      .then(()=>{ toast(`Kargo #${id} silindi`, "ok"); loadCargo(); loadMetrics(); })
+      .catch(e => toast(`Hata: ${e.message}`, "err"));
+  } else if (b.dataset.act === "next"){
+    setStatus(id, b.dataset.to);
+  } else {
+    setStatus(id, b.dataset.to);
+  }
+});
+
+/* ---------------- FORM ---------------- */
+$("btnNew").onclick = async () => {
+  const tn = $("tn").value.trim(), sn = $("sn").value.trim(), rc = $("rc").value.trim();
+  if (!tn || !sn || !rc){ toast("Takip no, gönderici ve alıcı zorunlu", "err"); return; }
+  $("btnNew").disabled = true;
+  try{
+    const c = await api("/cargo", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({tracking_number:tn, sender:sn, receiver:rc})});
+    toast(`Kargo #${c.id} oluşturuldu → cargo.created event'i Kafka'ya gitti`, "ok");
+    $("directId").value = c.id;
+    $("tn").value = $("sn").value = $("rc").value = "";
+    await Promise.all([loadCargo(), loadMetrics()]);
+  }catch(e){ toast(`Hata: ${e.message}`, "err"); }
+  $("btnNew").disabled = false;
+};
+
+function fillSelect(){
+  $("stSel").innerHTML = STATUSES.map(s =>
+    `<option value="${s}">${LABEL[s]} (${s})</option>`).join("");
+}
+fillSelect();
+
+$("btnSt").onclick = () => {
+  const id = $("cargoList").dataset.sel;
+  if (!id){ toast("Önce listeden bir kargo seç", "err"); return; }
+  setStatus(id, $("stSel").value);
+};
+$("btnDirect").onclick = () => {
+  const id = $("directId").value.trim();
+  if (!id){ toast("Kargo ID gir", "err"); return; }
+  setStatus(id, $("stSel").value);
+};
+
+/* ---------------- EVENTLER ---------------- */
+async function loadEvents(){
+  let d;
+  try{
+    const r = await fetch(EVENTS_URL, {cache:"no-store"});
+    d = await r.json();
+  }catch(e){
+    $("events").innerHTML = `<div class="empty">Consumer'a ulaşılamıyor<br>
+      <code>docker compose ps</code></div>`;
+    return;
+  }
+  $("eCount").textContent = d.count;
+  if (!d.count){
+    $("events").innerHTML = `<div class="empty">Henüz event yok — yukarıdan kargo oluştur</div>`;
+    return;
+  }
+  $("events").innerHTML = d.events.slice(0, 60).map(e => `
+    <div class="ev">
+      <span class="t">${esc(e.time)}</span>
+      <span class="e e-${esc(e.event)}">${esc(e.event)}</span>
+      <span class="m">${esc(e.message)}</span>
+    </div>`).join("");
+}
+
+/* ---------------- METRIKLER ---------------- */
+async function loadMetrics(){
+  const m = {};
+  try{
+    const t = await (await fetch(API+"/metrics", {cache:"no-store"})).text();
+    const grab = n => {
+      const r = t.match(new RegExp("^"+n+" (\\S+)", "m"));
+      return r ? Math.round(+r[1]) : 0;
+    };
+    m.created   = grab("cargo_created_total");
+    m.delivered = grab("cargo_delivered_total");
+    m.cancelled = grab("cargo_cancelled_total");
+    m.changed   = grab("cargo_status_changed_total");
+    const req = [...t.matchAll(/^api_request_total\{[^}]*\} (\S+)/gm)]
+                 .reduce((s,x)=>s+(+x[1]),0);
+    m.requests  = req;
+  }catch(e){}
+  try{
+    const d = await (await fetch(EVENTS_URL, {cache:"no-store"})).json();
+    m.events = d.count;
+  }catch(e){ m.events = 0; }
+
+  const cards = [
+    ["Toplam Kargo",   m.created,   "c-blue"],
+    ["Teslim Edilen",  m.delivered, "c-green"],
+    ["İptal Edilen",   m.cancelled, "c-red"],
+    ["Durum Değişimi", m.changed,   "c-purple"],
+    ["Kafka Event",    m.events,    "c-cyan"],
+    ["API İsteği",     m.requests,  "c-amber"],
+  ];
+  $("mgrid").innerHTML = cards.map(([k,v,c]) =>
+    `<div class="m ${c}"><div class="v">${v ?? 0}</div><div class="k">${k}</div></div>`
+  ).join("");
+}
+
+/* ---------------- DONGU ---------------- */
+async function tick(){
+  await Promise.allSettled([loadServices(), loadCargo(), loadEvents(), loadMetrics()]);
+}
+tick();
+setInterval(tick, 3000);
+</script>
+</body>
+</html>

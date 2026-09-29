@@ -43,18 +43,54 @@ CARGO_BY_STATUS = Gauge(
     ["status"],
 )
 
+# --- Son islenen event'ler (kontrol panelinin gostermesi icin) ---
+# Kafka partition siralamasi korundugu icin liste kronolojik kalir.
+_MAX_EVENTS = 200
+_recent: list[dict] = []
+_recent_lock = threading.Lock()
+
+
+def record_event(payload: dict, message: str) -> None:
+    """Event'i hem logla hem de son-event arabellekine ekle."""
+    entry = {
+        "ts": time.time(),
+        "time": time.strftime("%H:%M:%S"),
+        "event": payload.get("event", "unknown"),
+        "cargo_id": payload.get("cargo_id"),
+        "tracking_number": payload.get("tracking_number"),
+        "status": payload.get("status"),
+        "message": message,
+        "raw": payload,
+    }
+    with _recent_lock:
+        _recent.append(entry)
+        if len(_recent) > _MAX_EVENTS:
+            del _recent[: len(_recent) - _MAX_EVENTS]
+
 
 class MetricsHandler(BaseHTTPRequestHandler):
-    """Prometheus'un metrikleri cektigi HTTP ucu."""
+    """Prometheus'un metrikleri cektigi HTTP ucu + kontrol paneli /events ucu."""
 
     def do_GET(self):  # noqa: N802
-        if self.path == "/metrics":
-            body = generate_latest().decode("utf-8")
+        if self.path.startswith("/metrics"):
+            # generate_latest() zaten bytes dondurur; tekrar encode edilmez.
+            body = generate_latest()
             self.send_response(200)
             self.send_header("Content-Type", CONTENT_TYPE_LATEST)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body.encode("utf-8"))
+            self.wfile.write(body)
+        elif self.path.startswith("/events"):
+            # kontrol paneli: son islenen event'ler (en yeniden basa)
+            with _recent_lock:
+                events = list(reversed(_recent))
+            body = json.dumps({"count": len(events), "events": events}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         else:
             self.send_error(404)
 
@@ -127,7 +163,9 @@ def main():
                 EVENT_LAST_SEEN.set(time.time())
                 if data.get("status"):
                     CARGO_BY_STATUS.labels(status=data["status"]).inc()
-                log.info("[%s@%d] %s", event, msg.partition, describe(data))
+                message = describe(data)
+                record_event(data, message)
+                log.info("[%s@%d] %s", event, msg.partition, message)
     except KeyboardInterrupt:
         pass
     finally:

@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+*.db
+*.log
+*.pdf
+*.pptx
+*.png
+render/
+docs/
+.git/
+.gitignore
+PLAN.md
+RAPOR.md
+README.md

@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY config.py run.py ./
 COPY app/ ./app/
 COPY consumer/ ./consumer/
+COPY tests/ ./tests/
 
 EXPOSE 5000 9091
 

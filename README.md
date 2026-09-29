@@ -38,6 +38,36 @@ teslim 5, iptal 2). Bu, event'lerin kayıpsız iletildiğinin kanıtıdır.
 
 ---
 
+## Kontrol Paneli (Demo Arayüzü)
+
+Sistemin tamamını tek ekrandan gösteren panel: **http://localhost:5000**
+
+![Kontrol Paneli](docs/kontrol-paneli.png)
+
+Panelde yapılabilenler:
+
+| Bölüm | İşlev |
+|---|---|
+| Servis rozetleri | Flask, Kafka, Consumer, Prometheus, Grafana — 3 saniyede bir canlı durum |
+| Kargo İşlemleri | Kargo oluşturma (→ Kafka'ya gönderir), durum değiştirme (gönder / teslim al / iptal) |
+| Kayıtlı Kargolar | Her kargo için tek tıkla sonraki duruma geçiş, teslim, iptal, silme |
+| Kafka Event Akışı | Consumer'ın Kafka'dan okuduğu event'ler canlı olarak akar |
+| Canlı Metrikler | API sayaçları ve consumer event sayısı, 6 kart |
+
+Panel 3 saniyede bir kendini yeniler; hiçbir sayfa yenilemesi gerekmez.
+
+### Panelin arkasındaki yeni uçlar
+
+| Uç | Ne yapar |
+|---|---|
+| `GET /` veya `/panel` | Panel HTML'ini döndürür |
+| `GET /api/kafka` | Broker bağlantı durumu |
+| `GET /api/prom` | Prometheus hedeflerinin `up`/`down` durumu |
+| `GET /api/grafana` | Grafana sağlık durumu |
+| `GET :9091/events` | Consumer'ın son 200 event'i (panelin akış bölümü) |
+
+---
+
 ## Mimari
 
 ```

@@ -1,13 +1,34 @@
-"""REST API rotaları."""
+"""REST API rotaları + kontrol paneli."""
+import json
 import time
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import (Blueprint, current_app, jsonify, render_template, request)
 from prometheus_client import generate_latest
 
 from app import kafka_producer as producer
 from app import metrics, models
+from config import Config
 
 bp = Blueprint("api", __name__)
+
+# Kontrol paneli icin yardimci servisler. Container icinde servis adi dogru
+# adrestir; Flask local calistirildiginde localhost kullanilir.
+_PROM_URLS = ("http://prometheus:9090", "http://localhost:9090")
+_GRAFANA_URLS = ("http://grafana:3000", "http://localhost:3000")
+
+
+def _fetch_json(bases, path, timeout=2.5):
+    """Verilen adreslerden ilk calisani GET eder. (veri, hata) doner."""
+    import urllib.request
+
+    last = "bilinmiyor"
+    for base in bases:
+        try:
+            with urllib.request.urlopen(base + path, timeout=timeout) as r:
+                return json.load(r), None
+        except Exception as exc:  # noqa: BLE001
+            last = str(exc)
+    return None, last
 
 
 # --------------------------------------------------------------------------
@@ -129,3 +150,52 @@ def health():
         "kafka": producer.healthcheck(),
         "counts": models.count_by_status(),
     }), 200
+
+
+# --------------------------------------------------------------------------
+# Kontrol paneli (demo arayuzu)
+# --------------------------------------------------------------------------
+@bp.get("/")
+@bp.get("/panel")
+def panel():
+    """Hocaya gosterilecek tek ekran: islemler + event akisi + metrikler."""
+    return render_template("dashboard.html")
+
+
+@bp.get("/api/kafka")
+def api_kafka():
+    """Panel rozeti icin broker durumu."""
+    return jsonify({
+        "connected": producer.healthcheck(),
+        "bootstrap": Config.KAFKA_BOOTSTRAP,
+        "topic": Config.KAFKA_TOPIC,
+    })
+
+
+@bp.get("/api/prom")
+def api_prom():
+    """Prometheus hedeflerinin up/down durumu.
+
+    Container icinden localhost degil servis adi kullanilir; local calistirmada
+    (docker disi) localhost dogru adrestir, bu yuzden once biri denenir.
+    """
+    body, err = _fetch_json(_PROM_URLS, "/api/v1/targets")
+    if err or not isinstance(body, dict):
+        return jsonify({"up": False, "error": err or "hata", "targets": {}})
+    try:
+        targets = body["data"]["activeTargets"]
+    except (KeyError, TypeError):
+        return jsonify({"up": False, "error": "beklenmeyen yanit", "targets": {}})
+    return jsonify({
+        "up": bool(targets) and all(t["health"] == "up" for t in targets),
+        "targets": {t["labels"]["job"]: t["health"] for t in targets},
+    })
+
+
+@bp.get("/api/grafana")
+def api_grafana():
+    """Grafana ayakta mi?"""
+    body, err = _fetch_json(_GRAFANA_URLS, "/api/health")
+    if err or not isinstance(body, dict):
+        return jsonify({"up": False, "error": err or "hata"})
+    return jsonify({"up": True, **body})
