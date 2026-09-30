@@ -12,6 +12,7 @@ COPY config.py run.py ./
 COPY app/ ./app/
 COPY consumer/ ./consumer/
 COPY tests/ ./tests/
+COPY scripts/ ./scripts/
 
 EXPOSE 5000 9091
 
