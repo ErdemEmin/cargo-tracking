@@ -19,8 +19,14 @@ from app import models      # noqa: E402
 YESIL, KIRMIZI, SARI, SIFIRLA = "\033[32m", "\033[31m", "\033[33m", "\033[0m"
 
 
-def kontrol(db_yolu, etiket):
-    """Verilen DB yoluna baglanmayi dener. (baglandi_mi, mesaj) doner."""
+def kontrol(db_yolu, yazma_testi=True):
+    """Verilen DB yoluna baglanmayi dener. (baglandi_mi, mesaj) doner.
+
+    yazma_testi=False verilirse hicbir veri degistirilmez; sadece baglanti,
+    sema ve okuma kontrolu yapilir. Gercek veritabani dosyalarinda yazma
+    yapilmaz, aksi halde kontrol kendi kaydini birakir ve sonraki
+    calistirmada UNIQUE ihlali olur.
+    """
     app = create_app({
         "TESTING": True,
         "DB_PATH": db_yolu,
@@ -39,12 +45,23 @@ def kontrol(db_yolu, etiket):
             if "cargo" not in tablolar:
                 return False, "baglandi ama 'cargo' tablosu yok"
 
-            # yazma-okuma
-            k = models.create_cargo("KRG-CHK-1", "S", "R")
+            # okuma testi (veri degistirmez)
+            kayitlar = models.list_cargo()
+            adet = len(kayitlar)
+
+            if not yazma_testi:
+                durum = ", ".join(
+                    f"{k}:{v}" for k, v in models.count_by_status().items()) or "-"
+                return True, f"tablo='cargo', kayit={adet}, durum: {durum}"
+
+            # yazma testi (yalnizca gecici dosyada)
+            etiket = "KRG-CHK-" + os.urandom(3).hex().upper()
+            k = models.create_cargo(etiket, "S", "R")
             if k is None or models.get_cargo(k["id"]) is None:
                 return False, "baglandi ama yazma/okuma calismadi"
+            models.delete_cargo(k["id"])          # iz birakma
+            return True, f"tablo='cargo', yazma/okuma testi gecti, kayit={adet}"
 
-            return True, f"tablo='cargo', kayit sayisi={len(models.list_cargo())}"
     except Exception as exc:  # noqa: BLE001
         return False, f"{type(exc).__name__}: {exc}"
 
@@ -59,23 +76,23 @@ def main():
     # --- 1) Gecici, temiz veritabani (her zaman acilmali) ---
     import tempfile
     gecici = os.path.join(tempfile.mkdtemp(), "chk.db")
-    ok, msg = kontrol(gecici, "gecici")
+    ok, msg = kontrol(gecici, yazma_testi=True)
     sonuclar.append(("Gecici veritabani (yeni dosya)", ok, msg))
 
-    # --- 2) Proje veritabani (dosya varsa) ---
+    # --- 2) Proje veritabani (dosya varsa) — SADECE OKUMA ---
     proje_db = os.path.abspath(
         Path(__file__).resolve().parent.parent / "cargo.db")
     if os.path.exists(proje_db):
-        ok2, msg2 = kontrol(proje_db, "proje")
+        ok2, msg2 = kontrol(proje_db, yazma_testi=False)
         sonuclar.append(("Proje veritabani (cargo.db)", ok2, msg2))
     else:
         sonuclar.append(("Proje veritabani (cargo.db)", None,
                          "dosya yok - normal, API ilk calistirmada olusturur"))
 
-    # --- 3) Docker icindeki SQLite (volume) ---
+    # --- 3) Docker icindeki SQLite (volume) — SADECE OKUMA ---
     docker_db = "/data/cargo.db"
     if os.path.exists(docker_db):
-        ok3, msg3 = kontrol(docker_db, "docker")
+        ok3, msg3 = kontrol(docker_db, yazma_testi=False)
         sonuclar.append(("Docker volume (/data/cargo.db)", ok3, msg3))
     else:
         sonuclar.append(("Docker volume (/data/cargo.db)", None,
